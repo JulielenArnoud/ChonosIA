@@ -3,10 +3,11 @@
 :root {
   --font-size: 15px;
   --background: #1a3a6b;
+  --nav_background: #0a1e40;
   --foreground: #e8f0fc;
   --card: #1e4278;
   --card-foreground: #e8f0fc;
-  --popover: #1e4278;
+  --popover: #abcdff;
   --popover-foreground: #e8f0fc;
   --primary: #60b8ff;
   --primary-foreground: #0a1e40;
@@ -18,7 +19,7 @@
   --accent-foreground: #e8f0fc;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: rgba(96, 184, 255, 0.18);
+  --border: rgba(250, 251, 251, 0.18);
   --input: transparent;
   --input-background: #1e4278;
   --switch-background: #2a5490;

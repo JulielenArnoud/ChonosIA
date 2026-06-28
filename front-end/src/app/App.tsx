@@ -7,11 +7,12 @@ import { CREDENTIALS } from "../features/auth/constants/credentials";
 import { SEED_FILES } from "../features/documents/data/seed";
 import { ChronosLogo } from "../shared/components/ChronosLogo";
 import { DocIllustration } from "../shared/components/DocIllustration";
+import { apiRequest, formatBytes } from "../lib/api";
 
 function LandingPage({ onNav }: { onNav: (mode: AuthMode) => void }) {
   return (
     <div className="min-h-screen bg-background font-sans flex flex-col">
-      <nav className="flex items-center justify-between px-8 py-5 border-b border-border">
+      <nav className=" bg-[var(--nav_background)] flex items-center justify-between px-8 py-5 border-b border-border">
         <div className="flex items-center gap-3">
           <ChronosLogo size={36} />
           <div>
@@ -37,7 +38,7 @@ function LandingPage({ onNav }: { onNav: (mode: AuthMode) => void }) {
 
           <h1 className="font-display text-4xl md:text-5xl font-semibold text-foreground leading-tight mb-4">
             Gestão de<br />
-            <span style={{ color: "#60b8ff" }}>Documentos</span>
+            <span style={{ color: "#ffffff" }}>Documentos</span>
           </h1>
           <p className="text-base text-muted-foreground max-w-sm mx-auto leading-relaxed mb-10">
             Armazene, organize e acesse seus documentos com segurança e controle total.
@@ -194,38 +195,86 @@ function Dashboard({ user, onLogout }: { user: AppUser; onLogout: () => void }) 
   const [files, setFiles] = useState<DocFile[]>(SEED_FILES);
   const [isDragging, setIsDragging] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const visible = user.role === "admin" ? files : files.filter((f) => f.ownerEmail === user.email);
 
-  const addFile = (fileName: string, rawSize: number) => {
-    const next: DocFile = {
-      id: `CHR-${String(files.length + 1).padStart(4, "0")}`,
-      name: fileName,
-      type: /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName) ? "image" : "pdf",
-      size: `${(rawSize / 1024 / 1024).toFixed(1)} MB`,
-      date: new Date().toLocaleDateString("pt-BR"),
-      ownerEmail: user.email,
-      ownerName: user.name,
-    };
-    setFiles((p) => [next, ...p]);
-    toast.success("Documento enviado com sucesso!", {
-      description: fileName,
-      style: { background: "#0c1525", border: "1px solid rgba(0,200,232,0.18)", color: "#c8dcf0" },
-    });
+  const loadDocuments = async () => {
+    try {
+      const data = await apiRequest<{ id: number; title: string; s3Key: string; s3Url: string; fileSize: number; fileType: string }[]>("/documents");
+      const mapped = data.map((item) => ({
+        id: String(item.id),
+        name: item.title,
+        type: item.fileType.includes("image") ? "image" : "pdf",
+        size: formatBytes(item.fileSize),
+        date: new Date().toLocaleDateString("pt-BR"),
+        ownerEmail: user.email,
+        ownerName: user.name,
+      }));
+      setFiles(mapped);
+    } catch {
+      setFiles(SEED_FILES);
+    }
   };
 
-  const handleSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const addFile = async (file: File) => {
+    try {
+      setIsUploading(true);
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        const payload = {
+          title: file.name,
+          fileName: file.name,
+          contentType: file.type || "application/octet-stream",
+          fileContent: base64.split(",")[1] || "",
+        };
+
+        const response = await apiRequest<{ id: number; title: string; s3Key: string; s3Url: string; fileSize: number; fileType: string }>("/documents/upload", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+
+        const next: DocFile = {
+          id: String(response.id),
+          name: response.title,
+          type: response.fileType.includes("image") ? "image" : "pdf",
+          size: formatBytes(response.fileSize),
+          date: new Date().toLocaleDateString("pt-BR"),
+          ownerEmail: user.email,
+          ownerName: user.name,
+        };
+
+        setFiles((p) => [next, ...p]);
+        toast.success("Documento enviado com sucesso!", {
+          description: file.name,
+          style: { background: "#0c1525", border: "1px solid rgba(0,200,232,0.18)", color: "#c8dcf0" },
+        });
+        setIsUploading(false);
+      };
+      reader.onerror = () => {
+        setIsUploading(false);
+        toast.error("Não foi possível ler o arquivo.");
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      setIsUploading(false);
+      toast.error(error instanceof Error ? error.message : "Erro ao enviar documento.");
+    }
+  };
+
+  const handleSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) addFile(f.name, f.size);
+    if (f) await addFile(f);
     e.target.value = "";
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     const f = e.dataTransfer.files[0];
-    if (f) addFile(f.name, f.size);
+    if (f) await addFile(f);
   };
 
   const confirmDelete = (id: string) => {
@@ -280,12 +329,12 @@ function Dashboard({ user, onLogout }: { user: AppUser; onLogout: () => void }) 
           <h2 className="font-display text-lg font-semibold text-foreground mb-1">Enviar documento</h2>
           <p className="text-sm text-muted-foreground mb-5">Formatos aceitos: PDF, PNG, JPG. Máximo 50 MB por arquivo.</p>
 
-          <div onClick={() => inputRef.current?.click()} onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={handleDrop} className={`border-2 border-dashed rounded-xl py-12 flex flex-col items-center justify-center gap-4 cursor-pointer transition-all select-none ${isDragging ? "border-primary/70 bg-primary/5" : "border-border/60 hover:border-primary/45 hover:bg-primary/[0.025]"}`}>
+          <div onClick={() => !isUploading && inputRef.current?.click()} onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={handleDrop} className={`border-2 border-dashed rounded-xl py-12 flex flex-col items-center justify-center gap-4 cursor-pointer transition-all select-none ${isDragging ? "border-primary/70 bg-primary/5" : "border-border/60 hover:border-primary/45 hover:bg-primary/[0.025]"}`}>
             <div className={`w-14 h-14 rounded-full flex items-center justify-center border-2 transition-colors ${isDragging ? "border-primary bg-primary/15 text-primary" : "border-border bg-card text-muted-foreground"}`}>
               <Upload size={24} />
             </div>
             <div className="text-center">
-              <p className="text-base font-medium text-foreground">Arraste um arquivo aqui</p>
+              <p className="text-base font-medium text-foreground">{isUploading ? "Enviando arquivo..." : "Arraste um arquivo aqui"}</p>
               <p className="text-sm text-muted-foreground mt-1">ou <span className="text-primary font-medium">clique para selecionar</span></p>
             </div>
           </div>
