@@ -1,4 +1,4 @@
-# <img src="./assets/chronos-logo.png" alt="ChonosIA" height="40"/>
+# <img src="./assets/logo.png" alt="ChonosIA" height="100"/>
 
 > Plataforma serverless de gestão, processamento inteligente e arquivamento seguro de documentos para treinamento de Agentes de IA corporativos.
 
