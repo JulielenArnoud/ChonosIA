@@ -89,6 +89,8 @@ Amazon API Gateway      ← Ponto de entrada da API
 
 > Estimativa baseada em arquivos com média de 1MB · Cotação do Dólar: R$ 5,17 (28/06/2026) · Calculado via AWS Pricing Calculator
 
+📊 [Ver estimativa completa na AWS Pricing Calculator](https://calculator.aws/#/estimate?id=74116c2bcdbe2885fad6ae15b428e1068ee128f4)
+
 | Serviço | Custo (USD) | Custo (BRL) |
 |---|---|---|
 | AWS Lambda | — | — |
@@ -122,7 +124,7 @@ O projeto foi conduzido com **Kanban** para organização visual do fluxo de tar
 ```
 ChonosIA/
 ├── assets/
-│   └── chronos-logo.png                    ← Logo do projeto
+│   └── logo.png                            ← Logo do projeto
 ├── back-end/
 │   ├── src/
 │   │   ├── app.ts                          ← Aplicação Express (CORS, rotas, error handler)
