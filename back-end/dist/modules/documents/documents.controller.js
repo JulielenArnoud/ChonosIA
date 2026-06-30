@@ -27,16 +27,8 @@ async function uploadDocument(input) {
         const result = await (0, database_1.query)('INSERT INTO documents (title, s3_key, s3_url, file_size, file_type) VALUES ($1, $2, $3, $4, $5) RETURNING id, title, s3_key as "s3Key", s3_url as "s3Url", file_size as "fileSize", file_type as "fileType"', [input.title, upload.key, upload.url, fileBuffer.byteLength, input.contentType]);
         return result.rows[0];
     }
-    catch {
-        const document = {
-            id: fallbackDocuments.length + 1,
-            title: input.title,
-            s3Key: 'local-fallback',
-            s3Url: 'not-uploaded',
-            fileSize: Buffer.byteLength(input.fileContent, 'base64'),
-            fileType: input.contentType,
-        };
-        fallbackDocuments.push(document);
-        return document;
+    catch (error) {
+        console.error('Erro ao fazer upload para o S3:', error);
+        throw new Error(error instanceof Error ? error.message : 'Erro ao fazer upload para o S3');
     }
 }

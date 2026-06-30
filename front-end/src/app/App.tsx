@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion } from "motion/react";
 import { Upload, LogOut, FileText, FileImage, Trash2, Eye, ShieldCheck, User, ChevronLeft, AlertCircle } from "lucide-react";
 import { toast, Toaster } from "sonner";
@@ -79,39 +79,66 @@ function AuthPage({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (mode === "register") {
+      if (!name.trim()) {
+        setError("Por favor, informe seu nome completo.");
+        return;
+      }
+      if (!email.includes("@")) {
+        setError("Informe um e-mail válido.");
+        return;
+      }
+      if (password.length < 6) {
+        setError("A senha deve ter no mínimo 6 caracteres.");
+        return;
+      }
+    }
+
     setLoading(true);
 
-    setTimeout(() => {
-      setLoading(false);
+    try {
       if (mode === "login") {
-        const cred = CREDENTIALS[email.toLowerCase()];
-        if (cred && cred.password === password) {
-          onLogin(cred.user);
-        } else {
-          setError("E-mail ou senha incorretos. Verifique e tente novamente.");
+        const users = await apiRequest<Array<{ id: number; name: string; email: string; password: string; role: string }>>("/users");
+        const existingUser = users.find((userRecord) => userRecord.email.toLowerCase() === email.toLowerCase() && userRecord.password === password);
+
+        if (existingUser) {
+          onLogin({ email: existingUser.email, name: existingUser.name, role: existingUser.role === "admin" ? "admin" : "user" });
+          return;
         }
+
+        const fallbackCred = CREDENTIALS[email.toLowerCase()];
+        if (fallbackCred && fallbackCred.password === password) {
+          onLogin(fallbackCred.user);
+          return;
+        }
+
+        setError("E-mail ou senha incorretos. Verifique e tente novamente.");
       } else {
-        if (!name.trim()) {
-          setError("Por favor, informe seu nome completo.");
-          return;
-        }
-        if (!email.includes("@")) {
-          setError("Informe um e-mail válido.");
-          return;
-        }
-        if (password.length < 6) {
-          setError("A senha deve ter no mínimo 6 caracteres.");
-          return;
-        }
-        onLogin({ email, name, role: "user" });
+        const createdUser = await apiRequest<{ id: number; name: string; email: string; role: string }>("/users", {
+          method: "POST",
+          body: JSON.stringify({ name, email, password }),
+        });
+
+        onLogin({ email: createdUser.email, name: createdUser.name, role: createdUser.role === "admin" ? "admin" : "user" });
         toast.success("Conta criada com sucesso!", {
           style: { background: "#1e4278", border: "1px solid rgba(96,184,255,0.25)", color: "#e8f0fc" },
         });
       }
-    }, 900);
+    } catch (error) {
+      const fallbackCred = CREDENTIALS[email.toLowerCase()];
+      if (mode === "login" && fallbackCred && fallbackCred.password === password) {
+        onLogin(fallbackCred.user);
+        return;
+      }
+
+      setError(error instanceof Error ? error.message : "Não foi possível conectar ao servidor.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const isLogin = mode === "login";
@@ -200,13 +227,17 @@ function Dashboard({ user, onLogout }: { user: AppUser; onLogout: () => void }) 
 
   const visible = user.role === "admin" ? files : files.filter((f) => f.ownerEmail === user.email);
 
+  useEffect(() => {
+    void loadDocuments();
+  }, [user.email]);
+
   const loadDocuments = async () => {
     try {
       const data = await apiRequest<{ id: number; title: string; s3Key: string; s3Url: string; fileSize: number; fileType: string }[]>("/documents");
       const mapped = data.map((item) => ({
         id: String(item.id),
         name: item.title,
-        type: item.fileType.includes("image") ? "image" : "pdf",
+        type: (item.fileType.includes("image") ? "image" : "pdf") as "image" | "pdf",
         size: formatBytes(item.fileSize),
         date: new Date().toLocaleDateString("pt-BR"),
         ownerEmail: user.email,
@@ -231,20 +262,20 @@ function Dashboard({ user, onLogout }: { user: AppUser; onLogout: () => void }) 
           fileContent: base64.split(",")[1] || "",
         };
 
-        const response = await apiRequest<{ id: number; title: string; s3Key: string; s3Url: string; fileSize: number; fileType: string }>("/documents/upload", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
+const response = await apiRequest<{ title: string; s3Key: string; s3Url: string; fileSize: number; fileType: string }>("/documents/upload", {
+  method: 'POST',
+  body: JSON.stringify(payload),
+});
 
         const next: DocFile = {
-          id: String(response.id),
-          name: response.title,
-          type: response.fileType.includes("image") ? "image" : "pdf",
-          size: formatBytes(response.fileSize),
-          date: new Date().toLocaleDateString("pt-BR"),
-          ownerEmail: user.email,
-          ownerName: user.name,
-        };
+  id: response.s3Key,
+  name: response.title,
+  type: (response.fileType.includes("image") ? "image" : "pdf") as "image" | "pdf",
+  size: formatBytes(response.fileSize),
+  date: new Date().toLocaleDateString("pt-BR"),
+  ownerEmail: user.email,
+  ownerName: user.name,
+};
 
         setFiles((p) => [next, ...p]);
         toast.success("Documento enviado com sucesso!", {
@@ -440,6 +471,7 @@ export default function App() {
   const goAuth = (mode: AuthMode) => { setAuthMode(mode); setScreen("auth"); };
   const handleLogin = (u: AppUser) => { setUser(u); setScreen("dashboard"); };
   const handleLogout = () => { setUser(null); setScreen("landing"); };
+  
 
   if (screen === "landing") return <LandingPage onNav={goAuth} />;
   if (screen === "auth") return <AuthPage mode={authMode} onModeChange={setAuthMode} onBack={() => setScreen("landing")} onLogin={handleLogin} />;

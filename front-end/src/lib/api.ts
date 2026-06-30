@@ -1,12 +1,21 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3333";
+const API_KEY = import.meta.env.VITE_API_KEY;
+export const AWS_URL = import.meta.env.VITE_AWS_URL || API_BASE_URL;
+
 
 export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const method = options.method ?? (options.body ? "POST" : "GET");
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    method,
     headers: {
-      "Content-Type": "application/json",
+      ...(options.body && method !== "GET" && method !== "HEAD"
+        ? { "Content-Type": "application/json" }
+        : {}),
+      ...(API_KEY ? { "x-api-key": API_KEY } : {}),
       ...(options.headers || {}),
     },
-    ...options,
   });
 
   const contentType = response.headers.get("content-type") || "";
