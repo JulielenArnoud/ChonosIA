@@ -16,4 +16,5 @@ export interface DocFile {
   date: string;
   ownerEmail: string;
   ownerName: string;
+  previewUrl?: string;
 }

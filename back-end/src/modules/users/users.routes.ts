@@ -1,22 +1,21 @@
 import { Router } from 'express';
+import { asyncHandler } from '../../shared/utils/asyncHandler';
 import { createUser, listUsers } from './users.controller';
 
 export const usersRouter = Router();
 
-usersRouter.get('/', async (_req, res, next) => {
-  try {
+usersRouter.get(
+  '/',
+  asyncHandler(async (_req, res) => {
     const users = await listUsers();
     res.json(users);
-  } catch (error) {
-    next(error);
-  }
-});
+  }),
+);
 
-usersRouter.post('/', async (req, res, next) => {
-  try {
+usersRouter.post(
+  '/',
+  asyncHandler(async (req, res) => {
     const user = await createUser(req.body);
     res.status(201).json(user);
-  } catch (error) {
-    next(error);
-  }
-});
+  }),
+);

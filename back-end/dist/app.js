@@ -5,11 +5,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const dotenv_1 = __importDefault(require("dotenv"));
-const users_routes_1 = require("./modules/users/users.routes");
-const documents_routes_1 = require("./modules/documents/documents.routes");
+const documents_1 = require("./modules/documents");
+const users_1 = require("./modules/users");
+const errorHandler_1 = require("./shared/middlewares/errorHandler");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
-app.use(express_1.default.json());
+app.use(express_1.default.json({ limit: '50mb' }));
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
@@ -23,12 +24,7 @@ app.use((req, res, next) => {
 app.get('/', (_req, res) => {
     res.json({ message: 'Backend funcionando!' });
 });
-app.use('/users', users_routes_1.usersRouter);
-app.use('/documents', documents_routes_1.documentsRouter);
-app.use((err, _req, res, _next) => {
-    console.error(err);
-    res.status(500).json({
-        message: err instanceof Error ? err.message : 'Erro interno do servidor',
-    });
-});
+app.use('/users', users_1.usersRouter);
+app.use('/documents', documents_1.documentsRouter);
+app.use(errorHandler_1.errorHandler);
 exports.default = app;
