@@ -12,6 +12,25 @@ O sistema resolve dois desafios centrais: garantir acesso rápido durante o prim
 
 ---
 
+## 👥 Integrantes do Projeto
+
+| <img src="https://github.com/Mordev-tech.png" width="80px" style="border-radius: 50%;"/> | **André Moraes** | [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Mordev-tech) | [![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/andré-moraes-99940636a/) |
+| :---: | :--- | :---: | :---: |
+
+| <img src="https://github.com/CamilaSchmitt.png" width="80px" style="border-radius: 50%;"/> | **Camila Schmitt** | [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/CamilaSchmitt) | [![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/camila-schmitt-soares/) |
+| :---: | :--- | :---: | :---: |
+
+| <img src="https://github.com/FilipeOliveira-Dev.png" width="80px" style="border-radius: 50%;"/> | **Filipe Oliveira** | [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/FilipeOliveira-Dev) | [![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/filipeoliveiradasilva/) |
+| :---: | :--- | :---: | :---: |
+
+| <img src="https://github.com/JulielenArnoud.png" width="80px" style="border-radius: 50%;"/> | **Julielen Arnoud** | [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/JulielenArnoud) | [![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/julielen-arnoud-qa/) |
+| :---: | :--- | :---: | :---: |
+
+| <img src="https://github.com/paulacloudanalytics.png" width="80px" style="border-radius: 50%;"/> | **Paula Caroline Santos** | [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/paulacloudanalytics) | [![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/paula-caroline12/) |
+| :---: | :--- | :---: | :---: |
+
+
+
 ## 🏗️ Arquitetura
 
 ```
@@ -67,6 +86,7 @@ Amazon API Gateway      ← Ponto de entrada da API
 | Amazon SQS | Fila de mensagens para comunicação assíncrona entre Upload e Audit | Desacopla processamento sem perder eventos |
 | Amazon S3 | Armazenamento de objetos (PDFs, imagens) | Durabilidade 99,999999999%, lifecycle nativo |
 | S3 Glacier Flexible Retrieval | Arquivamento de longo prazo | Redução drástica de custo após 365 dias |
+| DynamoDB | Armazenamento de metados dos arquivos e dados dos usuários | Consulta o local do arquivo solicitado pelo usuário |
 | Amazon CloudWatch | Monitoramento, observabilidade e logs de auditoria | Rastreabilidade de todas as operações |
 
 ---
