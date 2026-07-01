@@ -1,4 +1,4 @@
-# ChonosIA 🧠
+# <img src="./assets/logo.png" alt="ChonosIA" height="70"/>
 
 > Plataforma serverless de gestão, processamento inteligente e arquivamento seguro de documentos para treinamento de Agentes de IA corporativos.
 
@@ -6,7 +6,7 @@
 
 ## 📌 Sobre o Projeto
 
-O **ChonosIA** é uma solução de arquitetura serverless na AWS para ingestão e governança de documentos em larga escala (PDFs e imagens). A Startup XYZ recebe aproximadamente **50 mil documentos por mês** e precisa que nenhum arquivo seja deletado — a base histórica é o combustível para o treinamento de futuros modelos de IA generativa e preditiva.
+O **ChonosIA** é uma solução de arquitetura serverless na AWS para ingestão e governança de documentos em larga escala (PDFs e imagens). A Startup XYZ recebe aproximadamente **50 mil documentos por mês** para análise de dados, e precisa que nenhum arquivo seja deletado — a base histórica é o combustível para o treinamento de futuros modelos de IA generativa e preditiva.
 
 O sistema resolve dois desafios centrais: garantir acesso rápido durante o primeiro ano e reduzir drasticamente os custos de armazenamento histórico a partir do segundo ano — tudo sem servidores fixos para gerenciar.
 
@@ -21,36 +21,38 @@ Usuários (Web / Mobile)
 Amazon Cognito          ← Autenticação e autorização
    │
    ▼
+AWS WAF                 ← Proteção contra ataques e ameaças
+   │
+   ▼
 Amazon API Gateway      ← Ponto de entrada da API
    │
-   ├──► Upload Function (Lambda)  ──► Amazon SQS ──► Amazon S3 Bucket Privado
-   │                                                        │
-   ├──► Download Function (Lambda) ──► GetObject            │ Lifecycle
-   │         └──► Presigned URL (15 min)                    │ 365 dias
-   │                                                        ▼
-   └──► Audit Function (Lambda) ──► Amazon CloudWatch   S3 Glacier
-                                       Logs              Flexible Retrieval
+   ├──► Upload Function (Lambda)   ──► Amazon SQS ──► Amazon S3 Bucket Privado
+   │                                                          │
+   ├──► Download Function (Lambda) ──► GetObject              │ Lifecycle
+   │         └──► Presigned URL                               │ 365 dias
+   │                                                          ▼
+   └──► Audit Function (Lambda) ──► Amazon CloudWatch     S3 Glacier
+                                       Logs                Flexible Retrieval
 ```
 
-**Fluxo de Upload (7 etapas):**
+**Fluxo de Upload (Upload Function):**
 
-1. Requisição chega na Lambda — extrai nome, tipo e metadados do usuário
-2. Valida o conteúdo — confere formato, tamanho e campos obrigatórios
-3. Organiza o arquivo — cria Object Key com prefixo por usuário (`user-123/documento.pdf`)
-4. Executa `PutObject` — armazena no bucket privado do S3
-5. Publica evento no Amazon SQS — fila para processamento assíncrono
-6. Audit Function registra a operação no CloudWatch Logs
+1. Lambda recebe a requisição e extrai metadados (ID do usuário, nome, tipo)
+2. Valida o conteúdo — confere formato (`pdf`, `jpeg`, `png`, `txt`), tamanho (máx. 10MB) e campos obrigatórios
+3. Organiza o arquivo — cria Object Key com prefixo por usuário (`user-{id}/timestamp-arquivo.pdf`)
+4. Executa `PutObject` — armazena no bucket privado do S3 com metadados (`userId`, `title`, `uploadedAt`)
+5. Publica evento `DOCUMENT_UPLOADED` no Amazon SQS — fila para processamento assíncrono
+6. Audit Function consome a fila e registra a operação no CloudWatch Logs
 7. Retorna confirmação ao cliente
 
-**Fluxo de Download (7 etapas):**
+**Fluxo de Download (Download Function):**
 
-1. Requisição chega na Lambda — extrai ID do usuário e documento solicitado
-2. Valida permissões — verifica no token (JWT) se o usuário tem acesso ao prefixo
-3. Verifica o S3 — confere se o arquivo existe no prefixo autorizado
-4. Gera Presigned URL — cria URL temporária com permissão de leitura (15 min)
-5. Retorna a URL ao cliente
-6. Cliente acessa o arquivo diretamente do S3 via URL assinada
-7. CloudWatch Logs registra a operação para auditoria
+1. Lambda recebe a requisição e extrai o token JWT do header `Authorization`
+2. Valida o token (`jsonwebtoken`) e extrai o ID do usuário
+3. Verifica se o arquivo solicitado pertence ao prefixo do usuário (`user-{id}/`) — nega acesso (`403`) caso contrário
+4. Gera uma **Presigned URL** (`getSignedUrl` do AWS SDK v3) com tempo de expiração limitado
+5. Retorna a URL assinada ao cliente, que acessa o arquivo diretamente do S3
+6. Operação é registrada via `console.log` — capturado automaticamente pelo CloudWatch
 
 ---
 
@@ -58,44 +60,62 @@ Amazon API Gateway      ← Ponto de entrada da API
 
 | Serviço | Função | Justificativa |
 |---|---|---|
-| Amazon Cognito | Autenticação e autorização de usuários | Gerenciado, suporte a JWT nativo |
-| Amazon API Gateway | Ponto de entrada HTTPS | Escalável, sem servidor próprio |
-| AWS Lambda | Upload, Download e Auditoria | Serverless — paga apenas por execução |
-| Amazon SQS | Fila para processamento assíncrono | Desacoplamento entre upload e processamento |
-| Amazon S3 | Armazenamento dos documentos | Durabilidade 99,999999999%, lifecycle nativo |
-| S3 Glacier Flexible Retrieval | Arquivamento de longo prazo | Redução ~70% no custo após 365 dias |
-| Amazon CloudWatch Logs | Monitoramento e auditoria | Rastreabilidade de todas as operações |
+| Amazon Cognito | Autenticação, autorização e gerenciamento de usuários | Gerenciado, suporte a JWT nativo |
+| AWS WAF | Proteção contra ataques comuns na camada de aplicação, filtrando tráfego HTTP/HTTPS | Firewall gerenciado sem servidor |
+| Amazon API Gateway | Criação, publicação e proteção de APIs | Escalável, sem servidor próprio |
+| AWS Lambda | Execução das funções de Upload, Download e Auditoria | Serverless — paga apenas por execução |
+| Amazon SQS | Fila de mensagens para comunicação assíncrona entre Upload e Audit | Desacopla processamento sem perder eventos |
+| Amazon S3 | Armazenamento de objetos (PDFs, imagens) | Durabilidade 99,999999999%, lifecycle nativo |
+| S3 Glacier Flexible Retrieval | Arquivamento de longo prazo | Redução drástica de custo após 365 dias |
+| Amazon CloudWatch | Monitoramento, observabilidade e logs de auditoria | Rastreabilidade de todas as operações |
 
 ---
 
 ## 🔒 Segurança e IAM
 
-- **Block Public Access** habilitado no bucket S3 — nenhum objeto exposto publicamente
+- **Block Public Access** habilitado em nível de bucket — nenhum objeto do S3 é acessível publicamente
 - **ACLs completamente desativadas** — governança centralizada nas políticas IAM
-- **IAM Role da Lambda** com permissões mínimas: `s3:PutObject`, `s3:GetObject` e `s3:ListBucket` estritamente limitadas ao prefixo do usuário
-- **Prefixo por userId** no S3: `userId/arquivo.pdf` — isolamento entre clientes garantido em nível de política, não apenas de código
-- **Presigned URLs** com expiração de 15 minutos para acesso temporário e seguro
-- **Amazon Cognito** para autenticação com validação JWT em cada requisição
+- **IAM Role da Lambda** com permissões de `s3:PutObject`, `s3:GetObject` e `s3:ListBucket`, estritamente limitadas ao prefixo do usuário (Least Privilege)
+- **Prefixo por userId** no S3: `user-{id}/arquivo.pdf` — a Download Function verifica esse prefixo antes de liberar qualquer acesso, isolando completamente os documentos entre usuários
+- **Presigned URLs** geradas pela Lambda para acesso temporário — o bucket permanece privado durante todo o processo
+- **Autenticação via JWT** validado em cada requisição de download (`jsonwebtoken`)
+- **Amazon Cognito** para autenticação e gerenciamento de usuários
+- **AWS WAF** como camada de proteção contra ataques antes do API Gateway
 - Sem credenciais hardcoded — autenticação via IAM Role em produção
 
 ---
 
 ## 💰 Custos Mensais
 
-> Estimativa baseada em arquivos com média de 1MB · Cotação do Dólar: R$ 5,17 (28/06/2026)
+> Estimativa baseada em arquivos com média de 1MB · Cotação do Dólar: R$ 5,17 (28/06/2026) · Calculado via AWS Pricing Calculator
+
+📊 [Ver estimativa completa na AWS Pricing Calculator](https://calculator.aws/#/estimate?id=74116c2bcdbe2885fad6ae15b428e1068ee128f4)
 
 | Serviço | Custo (USD) | Custo (BRL) |
 |---|---|---|
-| S3 PUT Requests (50k uploads/mês) | USD 0,25 | R$ 1,30 |
-| S3 Standard — Armazenamento | USD 1,15 | R$ 5,94 |
-| S3 Glacier (após 1 ano) | USD 2,16 | R$ 11,17 |
-| API Gateway + Lambda | USD 2,50 | R$ 13,00 |
+| AWS Lambda | — | — |
+| Amazon Cognito | USD 0,01 | R$ 0,05 |
+| Amazon SQS | USD 0,05 | R$ 0,26 |
+| Amazon API Gateway | USD 0,05 | R$ 0,26 |
+| Amazon DynamoDB | USD 0,29 | R$ 1,50 |
+| Amazon CloudWatch | USD 0,50 | R$ 2,59 |
+| Amazon S3 | USD 1,63 | R$ 8,46 |
+| AWS WAF | USD 7,00 | R$ 36,32 |
+| **Total mensal** | **USD 9,58** | **R$ 49,71** |
+| **Total anual** | **USD 114,96** | **R$ 596,52** |
 
 **Comportamento do custo ao longo do tempo:**
 
-- **Meses 1–12:** Custo cresce progressivamente à medida que os documentos acumulam no S3 Standard, atingindo o teto de aproximadamente **R$ 86,00/mês** no final do primeiro ano
-- **A partir do mês 13:** Os objetos mais antigos migram automaticamente para o S3 Glacier via Lifecycle Rule, reduzindo o custo de armazenamento em ~70% sem perda de dados
+- **Meses 1–12:** o custo de manter os arquivos acessíveis instantaneamente cresce progressivamente, atingindo o teto de aproximadamente **R$ 86,00/mês**
+- **A partir do mês 13:** os objetos mais antigos migram automaticamente para o S3 Glacier via Lifecycle Rule, reduzindo o custo de armazenamento histórico sem perda de dados
+- **Maior item de custo:** o AWS WAF concentra a maior parte do gasto mensal (R$ 36,32 de R$ 49,71 totais) — ponto de atenção para otimização futura
 - **Custo zero de infraestrutura ociosa:** arquitetura serverless — sem servidores pagos quando não há uso
+
+---
+
+## 🏗️ Metodologia de Desenvolvimento
+
+O projeto foi conduzido com **Kanban** para organização visual do fluxo de tarefas (Backlog → Em Andamento → Concluído) e princípios de **Scrum**, com entregas organizadas em ciclos curtos e iterativos.
 
 ---
 
@@ -103,16 +123,22 @@ Amazon API Gateway      ← Ponto de entrada da API
 
 ```
 ChonosIA/
+├── assets/
+│   └── logo.png                            ← Logo do projeto
 ├── back-end/
 │   ├── src/
 │   │   ├── app.ts                          ← Aplicação Express (CORS, rotas, error handler)
 │   │   ├── main.ts                         ← Servidor local (porta 3333)
-│   │   ├── lambda.ts                       ← Handler para AWS Lambda
+│   │   ├── lambda.ts                       ← Handler genérico para AWS Lambda (API REST)
 │   │   ├── config/
 │   │   │   ├── env.ts                      ← Variáveis de ambiente
 │   │   │   └── database.ts                 ← Conexão PostgreSQL
 │   │   ├── infra/storage/
 │   │   │   └── s3.ts                       ← Upload para S3 (PutObjectCommand)
+│   │   ├── lambdas/
+│   │   │   ├── Uploadfunction.ts           ← Lambda dedicada: valida, organiza e armazena no S3
+│   │   │   ├── Downloadfunction.ts         ← Lambda dedicada: valida JWT e gera Presigned URL
+│   │   │   └── Audifunction.ts             ← Lambda dedicada: consome SQS e registra no CloudWatch
 │   │   └── modules/
 │   │       ├── documents/
 │   │       │   ├── documents.controller.ts ← listDocuments, uploadDocument
@@ -120,6 +146,8 @@ ChonosIA/
 │   │       └── users/
 │   │           ├── users.controller.ts     ← listUsers, createUser
 │   │           └── users.routes.ts         ← GET / e POST /
+│   ├── scripts/
+│   │   └── create-admin.js                 ← Cria tabela users e usuário admin inicial
 │   ├── prisma/
 │   │   └── schema.prisma                   ← Model User (PostgreSQL)
 │   ├── package.json
@@ -135,6 +163,7 @@ ChonosIA/
 │   │   ├── shared/components/
 │   │   │   ├── ChronosLogo.tsx
 │   │   │   └── DocIllustration.tsx
+│   │   ├── styles/
 │   │   └── types/app.ts                    ← Screen, AppUser, DocFile
 │   ├── index.html
 │   ├── vite.config.ts
@@ -167,6 +196,7 @@ AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=sua_access_key       # Deixar vazio em produção (usa IAM Role)
 AWS_SECRET_ACCESS_KEY=sua_secret_key   # Deixar vazio em produção (usa IAM Role)
 AWS_S3_BUCKET=nome-do-seu-bucket
+SQS_QUEUE_URL=url-da-fila-sqs           # Necessário para a Upload Function
 ```
 
 > ⚠️ Em produção na AWS Lambda, **não preencher** `AWS_ACCESS_KEY_ID` e `AWS_SECRET_ACCESS_KEY`. A Lambda usa a IAM Role automaticamente.
@@ -185,7 +215,7 @@ VITE_API_URL=http://localhost:3333
 
 - Node.js 18+
 - PostgreSQL rodando localmente
-- AWS CLI configurado (para testes de S3)
+- AWS CLI configurado (para testes de S3/SQS)
 
 ### Back-end
 
@@ -193,8 +223,8 @@ VITE_API_URL=http://localhost:3333
 cd back-end
 npm install
 
-# Criar o banco
-createdb chronos_ia
+# Criar a tabela users e o usuário admin inicial
+node scripts/create-admin.js
 
 # Rodar migrations do Prisma
 npx prisma migrate dev
@@ -245,48 +275,87 @@ npm run dev
 ```json
 {
   "name": "Alan Turing",
-  "email": "user@email.com",
-  "password": "senha546"
+  "email": "exemplo@email.com",
+  "password": "senha123"
 }
 ```
 
 ---
 
-## ☁️ Deploy na AWS Lambda
+## ☁️ Deploy das Lambdas
 
-### 1. Fazer build
+O projeto possui **três funções Lambda dedicadas**, cada uma com responsabilidade única:
+
+| Lambda | Trigger | Responsabilidade |
+|---|---|---|
+| `Uploadfunction.ts` | API Gateway (POST) | Valida, organiza e armazena o documento no S3; publica evento no SQS |
+| `Downloadfunction.ts` | API Gateway (GET) | Valida JWT e gera Presigned URL para acesso temporário |
+| `Audifunction.ts` | Amazon SQS | Consome eventos da fila e registra logs estruturados no CloudWatch |
+
+### 1. Build do back-end
 
 ```bash
 cd back-end
 npm run build
 ```
 
-### 2. Empacotar
+### 2. Empacotar cada Lambda
 
 ```bash
-zip -r function.zip dist/ node_modules/ package.json
+zip -r upload-function.zip dist/lambdas/Uploadfunction.js node_modules/
+zip -r download-function.zip dist/lambdas/Downloadfunction.js node_modules/
+zip -r audit-function.zip dist/lambdas/Audifunction.js node_modules/
 ```
 
-### 3. Criar a função Lambda
+### 3. Criar a Upload Function
 
 ```bash
 aws lambda create-function \
-  --function-name chonosIA-backend \
+  --function-name chronos-upload-function \
   --runtime nodejs18.x \
-  --role arn:aws:iam::SUA_CONTA:role/chonosIA-lambda-role \
-  --handler dist/lambda.handler \
-  --zip-file fileb://function.zip \
+  --role arn:aws:iam::SUA_CONTA:role/chronos-lambda-role \
+  --handler dist/lambdas/Uploadfunction.handler \
+  --zip-file fileb://upload-function.zip \
   --environment Variables="{
-    DB_HOST=seu_postgres_host,
-    DB_NAME=chronos_ia,
-    DB_USER=postgres,
-    DB_PASSWORD=sua_senha,
     AWS_S3_BUCKET=nome-do-bucket,
-    AWS_REGION=us-east-1
+    AWS_REGION=us-east-1,
+    SQS_QUEUE_URL=url-da-fila-sqs
   }"
 ```
 
-### 4. Configurar ciclo de vida do S3 (Lifecycle Rule — 365 dias)
+### 4. Criar a Download Function
+
+```bash
+aws lambda create-function \
+  --function-name chronos-download-function \
+  --runtime nodejs18.x \
+  --role arn:aws:iam::SUA_CONTA:role/chronos-lambda-role \
+  --handler dist/lambdas/Downloadfunction.handler \
+  --zip-file fileb://download-function.zip \
+  --environment Variables="{
+    AWS_S3_BUCKET=nome-do-bucket,
+    AWS_REGION=us-east-1,
+    JWT_SECRET=seu_secret
+  }"
+```
+
+### 5. Criar a Audit Function e conectar ao SQS
+
+```bash
+aws lambda create-function \
+  --function-name chronos-audit-function \
+  --runtime nodejs18.x \
+  --role arn:aws:iam::SUA_CONTA:role/chronos-lambda-role \
+  --handler dist/lambdas/Audifunction.handler \
+  --zip-file fileb://audit-function.zip
+
+aws lambda create-event-source-mapping \
+  --function-name chronos-audit-function \
+  --event-source-arn arn:aws:sqs:us-east-1:SUA_CONTA:nome-da-fila \
+  --batch-size 10
+```
+
+### 6. Configurar Lifecycle Rule do S3 (365 dias)
 
 ```bash
 aws s3api put-bucket-lifecycle-configuration \
@@ -304,7 +373,7 @@ aws s3api put-bucket-lifecycle-configuration \
   }'
 ```
 
-### 5. Bloquear acesso público ao S3
+### 7. Bloquear acesso público ao S3
 
 ```bash
 aws s3api put-public-access-block \
@@ -315,11 +384,11 @@ aws s3api put-public-access-block \
 
 ---
 
-## 🗺️ Roadmap de Implementação
+## 🗺️ Roadmap
 
 | Fase | Entregável |
 |---|---|
-| 1 | Configuração de IaC (Terraform) e Buckets S3 com Block Public Access |
+| 1 | Configuração de Buckets S3 com Block Public Access |
 | 2 | Desenvolvimento das Lambdas e integração com API Gateway |
 | 3 | Implementação de políticas IAM e Lifecycle Rules de 365 dias |
 | 4 | Monitoramento de custos via AWS Budgets e validação de dados |
@@ -331,17 +400,18 @@ aws s3api put-public-access-block \
 **Back-end:**
 - Node.js 18 + TypeScript 6
 - Express 5
-- AWS SDK v3 (`@aws-sdk/client-s3`, `@aws-sdk/client-cognito-identity-provider`)
-- Prisma ORM + PostgreSQL
+- AWS SDK v3 (`@aws-sdk/client-s3`, `@aws-sdk/client-sqs`, `@aws-sdk/s3-request-presigner`, `@aws-sdk/client-cognito-identity-provider`)
+- jsonwebtoken (validação de JWT)
+- Prisma ORM + PostgreSQL (`pg`)
 - Dotenv, Joi
 
 **Front-end:**
 - React 18 + TypeScript
 - Vite 6
 - Tailwind CSS 4
-- shadcn/ui (componentes)
 - Lucide React (ícones)
 - Motion (animações)
+- Sonner (notificações)
 
 ---
 
@@ -352,4 +422,7 @@ aws s3api put-public-access-block \
 - [AWS IAM Best Practices](https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html)
 - [AWS Well-Architected Framework](https://docs.aws.amazon.com/wellarchitected/latest/framework/welcome.html)
 - [Amazon Cognito](https://docs.aws.amazon.com/cognito/latest/developerguide/what-is-amazon-cognito.html)
+- [AWS WAF](https://docs.aws.amazon.com/waf/latest/developerguide/what-is-aws-waf.html)
+- [Amazon SQS](https://docs.aws.amazon.com/AmazonSQS/latest/dg/welcome.html)
+- [S3 Presigned URLs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ShareObjectPreSignedURL.html)
 - [Prisma com PostgreSQL](https://www.prisma.io/docs/getting-started/setup-prisma/start-from-scratch/relational-databases-typescript-postgresql)
